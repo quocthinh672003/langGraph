@@ -1,12 +1,6 @@
-from langgraph.graph import StateGraph, START, END
+from src.graph import APP
 
-def mock_llm(state):
-    return {"role": "assistant", "content": "Hello, how are you?"}
-
-graph = StateGraph(state)
-graph.add_node("llm", mock_llm)
-graph.add_edge(START, "llm")
-graph.add_edge("llm", END)
-graph.compile()
-
-graph.invoke([{"role": "user", "content": "Hello, how are you?"}])
+if __name__ == "__main__":
+    user_text = "Hey, lên cho mình kế hoạch đi Đà Lạt 3 ngày 2 đêm với. Mình thích đi cà phê chill, chụp ảnh thiên nhiên. Ngân sách tầm trung thôi, và mình không thích đi bộ nhiều quá nhé."
+    out = APP.invoke({"input": user_text, "plan": [], "past_steps": [], "response": ""})
+    print(out.get("response", ""))
