@@ -105,11 +105,11 @@ def _step_search(location: str, duration: str, interests: List[str], budget: str
 	lines: List[str] = []
 	for i, it in enumerate(curated[:8], start=1):
 		title = it.get("title") or "Kết quả"
-		url = it.get("url") or ""
 		content = (it.get("content") or "").strip()
 		if len(content) > 120:
 			content = content[:117] + "..."
-		lines.append(f"{i}. {title} — {content} {url}")
+		# Do not include URL in the summary line
+		lines.append(f"{i}. {title} — {content}")
 	return {"curated_summary": "\n".join(lines), "citations": citations}
 
 
@@ -130,10 +130,11 @@ Yêu cầu gốc: {user_input}
 Sở thích: {', '.join(interests) if interests else 'du lịch'}; Ngân sách: {budget or 'không rõ'}; Hạn chế: {', '.join(constraints) if constraints else 'không có'}
 
 Nguyên tắc:
-- Gom điểm gần nhau theo khu vực; tránh nhảy xa.
-- Ưu tiên địa điểm hot, hợp giới trẻ; tránh filler (ví dụ thư viện, công viên ít đặc sắc).
-- Thêm món signature địa phương.
-- Ngày cuối thêm mục "mua đặc sản mang về" (khô mực, tré, bánh khô mè...).
+- Không dùng tên chung chung/placeholder (ví dụ “Khách sạn {location}”, “Homestay Mộng Mơ”). Nếu thiếu dữ liệu: ghi “Khu vực …, tham khảo thêm trên bản đồ”.
+- Lưu trú: đề xuất 2–3 nơi THẬT (tên + khu vực + tầm giá) nếu có trong kết quả search.
+- Chi phí: ghi theo khoảng (min–max) và nêu giả định phương tiện (ví dụ thuê xe máy 150–200k/ngày hoặc taxi/Grab ~10–15k/km). Không ghi “Vé: 0 VND”; nếu miễn phí ghi “miễn phí”.
+- Gom điểm gần nhau theo khu vực; tránh nhảy xa; ưu tiên địa điểm hot, hợp giới trẻ; tránh filler.
+- Thêm món signature địa phương đúng vùng; ngày cuối có “mua đặc sản mang về”.
 
 Kết quả search (rút gọn, thông tin thật):
 {curated_summary}
@@ -148,9 +149,9 @@ Kết quả search (rút gọn, thông tin thật):
 {day_blocks}
 
  Gợi ý nơi ở (tầm trung)
-- [Khách sạn/Homestay 1] - [khoảng giá/đêm]
-- [Khách sạn/Homestay 2] - [khoảng giá/đêm]
-- [Khách sạn/Homestay 3] - [khoảng giá/đêm]
+- [Tên thật 1] - [khu vực] - [khoảng giá/đêm]
+- [Tên thật 2] - [khu vực] - [khoảng giá/đêm]
+- [Tên thật 3] - [khu vực] - [khoảng giá/đêm]
 
  Ẩm thực signature nên thử
 - [Món 1]
@@ -165,12 +166,9 @@ Kết quả search (rút gọn, thông tin thật):
  Tổng chi phí ước tính ({num_days} ngày)
 - Lưu trú: [khoảng]
 - Ăn uống + cà phê: [khoảng]
-- Di chuyển: [khoảng]
+- Di chuyển (giả định …): [khoảng]
 - Vé/hoạt động: [khoảng]
 - Tổng: [khoảng]
-
- Nguồn tham khảo
-- Liệt kê URL thật từ dữ liệu search (không bịa).
 
 Yêu cầu: Rõ ràng, súc tích; không dùng địa chỉ giả; ưu tiên giờ/giá 2024-2025."""
 	else:
@@ -186,36 +184,26 @@ Yêu cầu: Rõ ràng, súc tích; không dùng địa chỉ giả; ưu tiên gi
 Yêu cầu gốc: {user_input}
 Sở thích: {', '.join(interests) if interests else 'du lịch'}; Ngân sách: {budget or 'không rõ'}; Hạn chế: {', '.join(constraints) if constraints else 'không có'}
 
-Nguyên tắc:
-- Gom theo khu vực/vibe; tránh backtracking; tránh filler.
-- Ưu tiên địa điểm hot, giờ mở cửa/giá rõ ràng.
-- Thêm món signature và gợi ý nơi ở tầm trung.
-
 Kết quả search (rút gọn):
 {curated_summary}
 
  {section_title}
 - 8-12 gợi ý chất lượng, nhóm theo khu vực/vibe nếu hợp lý.
-- Mỗi mục: tên, mô tả ngắn, thời điểm ghé (giờ mở cửa nếu có), lưu ý.
+- Mỗi mục: tên thật, mô tả ngắn, thời điểm ghé (giờ mở cửa nếu có), lưu ý.
+- Không dùng tên placeholder.
 
  Gợi ý nơi ở (tầm trung)
-- 2-3 lựa chọn với khoảng giá/đêm (nếu có nguồn).
+- 2-3 lựa chọn THẬT (tên + khu vực + tầm giá); nếu thiếu: ghi khu vực + cách tìm trên bản đồ.
 
  Ẩm thực signature
-- 3-5 món đặc trưng nên thử.
+- 3-5 món đặc trưng đúng vùng.
 
  Tips hữu ích
-- 3-5 tips thực tế.
-
- Nguồn tham khảo
-- Liệt kê URL thật; không bịa đặt.
+- 3-5 tips thực tế; chi phí ghi theo khoảng và nêu giả định khi cần.
 
 Yêu cầu: Rõ ràng, súc tích; không dùng địa chỉ giả; ưu tiên giờ/giá 2024-2025."""
 	resp = llm.invoke([system_msg, {"role": "user", "content": plan_prompt}])
 	md = resp.content
-	if citations and " Nguồn tham khảo" not in md:
-		refs = "\n".join(f"- {u}" for u in citations)
-		md += f"\n\n Nguồn tham khảo\n{refs}"
 	return md
 
 
@@ -231,7 +219,7 @@ def travel_agent(state: TravelState) -> TravelState:
 	interests = parsed.get("interests", [])
 	budget = parsed.get("budget", "")
 	constraints = parsed.get("constraints", [])
-	seed_queries = parsed.get("seed_queries", [])
+	seed_queries = parsed.get("search_queries", [])
 	num_days = parsed.get("num_days", 0)
 	task_type = parsed.get("task_type", "itinerary")
 
@@ -247,7 +235,6 @@ def travel_agent(state: TravelState) -> TravelState:
 	# search
 	search_out = _step_search(location, duration, interests, budget, constraints, seed_queries)
 	curated_summary = search_out.get("curated_summary", "")
-	citations = search_out.get("citations", [])
 
 	# plan
 	markdown = _step_plan(
@@ -260,7 +247,7 @@ def travel_agent(state: TravelState) -> TravelState:
 		constraints=constraints,
 		num_days=num_days,
 		curated_summary=curated_summary,
-		citations=citations,
+		citations=[],
 	)
 
 	return {"response": markdown}

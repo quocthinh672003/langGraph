@@ -2,6 +2,11 @@ from langchain_tavily import TavilySearch
 from typing import List, Dict, Any, Tuple, Optional
 import re
 
+# Config constants for easy tuning
+MAX_QUERIES: int = 4
+MAX_ITEMS: int = 8
+SUMMARY_LEN: int = 140
+
 
 def get_search_tool() -> TavilySearch:
 	"""Return Tavily search tool with a small result cap for speed."""
@@ -27,12 +32,6 @@ def _normalize_result(result: Any) -> List[Dict[str, Any]]:
 				content = r.get("content") or r.get("snippet")
 				if title or url or content:
 					items.append({"title": title, "url": url, "content": content})
-	else:
-		# Fallback: extract URLs from raw text
-		text = str(result)
-		urls = re.findall(r"https?://\S+", text)
-		for u in urls[:5]:
-			items.append({"title": None, "url": u, "content": None})
 	return items
 
 
@@ -40,13 +39,13 @@ def _summarize_items(items: List[Dict[str, Any]]) -> Tuple[str, List[str]]:
 	"""Build a compact summary and collect citation URLs."""
 	lines: List[str] = []
 	citations: List[str] = []
-	for i, it in enumerate(items[:8], start=1):  # tighter cap for brevity
+	for i, it in enumerate(items[:MAX_ITEMS], start=1):
 		title = it.get("title") or "Kết quả"
 		url = it.get("url") or ""
 		content = it.get("content") or ""
 		short = content.strip()
-		if len(short) > 140:
-			short = short[:137] + "..."
+		if len(short) > SUMMARY_LEN:
+			short = short[: SUMMARY_LEN - 3] + "..."
 		lines.append(f"{i}. {title} — {short} {url}")
 		if url:
 			citations.append(url)
@@ -83,16 +82,17 @@ def smart_search(
 		queries.append(f"{location} quán cà phê đẹp chill 2024 2025")
 		queries.append(f"{location} khách sạn tầm trung review tốt 2024 2025")
 
-	# Use at most 4 queries to keep latency low
-	queries = queries[:4]
+	# Use at most MAX_QUERIES to keep latency low
+	queries = queries[:MAX_QUERIES]
 
 	items: List[Dict[str, Any]] = []
 	for q in queries:
 		try:
 			result = search_tool.invoke(q)
 			items.extend(_normalize_result(result))
-		except Exception as e:
-			items.append({"title": "Lỗi", "url": None, "content": str(e)})
+		except Exception:
+			# Skip errors silently to avoid polluting results
+			continue
 
 	summary, citations = _summarize_items(items)
 	return {"summary": summary or f"Thông tin cơ bản về {location}", "citations": citations, "raw": items}
