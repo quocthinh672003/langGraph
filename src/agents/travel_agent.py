@@ -129,6 +129,12 @@ def _step_plan(llm: ChatOpenAI, user_input: str, task_type: str, location: str, 
 Yêu cầu gốc: {user_input}
 Sở thích: {', '.join(interests) if interests else 'du lịch'}; Ngân sách: {budget or 'không rõ'}; Hạn chế: {', '.join(constraints) if constraints else 'không có'}
 
+Nguyên tắc:
+- Gom điểm gần nhau theo khu vực; tránh nhảy xa.
+- Ưu tiên địa điểm hot, hợp giới trẻ; tránh filler (ví dụ thư viện, công viên ít đặc sắc).
+- Thêm món signature địa phương.
+- Ngày cuối thêm mục "mua đặc sản mang về" (khô mực, tré, bánh khô mè...).
+
 Kết quả search (rút gọn, thông tin thật):
 {curated_summary}
 
@@ -140,6 +146,28 @@ Kết quả search (rút gọn, thông tin thật):
 - Di chuyển: [gợi ý hạn chế đi bộ nếu có]
 
 {day_blocks}
+
+ Gợi ý nơi ở (tầm trung)
+- [Khách sạn/Homestay 1] - [khoảng giá/đêm]
+- [Khách sạn/Homestay 2] - [khoảng giá/đêm]
+- [Khách sạn/Homestay 3] - [khoảng giá/đêm]
+
+ Ẩm thực signature nên thử
+- [Món 1]
+- [Món 2]
+- [Món 3]
+
+ Tips & notes
+- [Tip 1]
+- [Tip 2]
+- [Tip 3]
+
+ Tổng chi phí ước tính ({num_days} ngày)
+- Lưu trú: [khoảng]
+- Ăn uống + cà phê: [khoảng]
+- Di chuyển: [khoảng]
+- Vé/hoạt động: [khoảng]
+- Tổng: [khoảng]
 
  Nguồn tham khảo
 - Liệt kê URL thật từ dữ liệu search (không bịa).
@@ -158,6 +186,11 @@ Yêu cầu: Rõ ràng, súc tích; không dùng địa chỉ giả; ưu tiên gi
 Yêu cầu gốc: {user_input}
 Sở thích: {', '.join(interests) if interests else 'du lịch'}; Ngân sách: {budget or 'không rõ'}; Hạn chế: {', '.join(constraints) if constraints else 'không có'}
 
+Nguyên tắc:
+- Gom theo khu vực/vibe; tránh backtracking; tránh filler.
+- Ưu tiên địa điểm hot, giờ mở cửa/giá rõ ràng.
+- Thêm món signature và gợi ý nơi ở tầm trung.
+
 Kết quả search (rút gọn):
 {curated_summary}
 
@@ -167,6 +200,9 @@ Kết quả search (rút gọn):
 
  Gợi ý nơi ở (tầm trung)
 - 2-3 lựa chọn với khoảng giá/đêm (nếu có nguồn).
+
+ Ẩm thực signature
+- 3-5 món đặc trưng nên thử.
 
  Tips hữu ích
 - 3-5 tips thực tế.
