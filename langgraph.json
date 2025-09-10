@@ -1,10 +1,19 @@
 {
-  "dependencies": ["."],
+  "env": ".env",
+  "dependencies": [
+    "langgraph",
+    "langgraph-api",
+    "langgraph-runtime-inmem",
+    "langchain",
+    "langchain-openai",
+    "langchain-community",
+    "langchain-tavily",
+    "tavily-python",
+    "langsmith",
+    "python-dotenv",
+    "pydantic"
+  ],
   "graphs": {
     "travel-agent": "src.graph:APP"
-  },
-  "env": ".env",
-  "image_distro": "wolfi"
+  }
 }
-
-  

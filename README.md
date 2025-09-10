@@ -1,14 +1,17 @@
-# Travel Agent
+# Travel Agent (LangGraph)
 
-Agent tạo lịch trình du lịch từ yêu cầu tiếng Việt.
+Agent tạo lịch trình du lịch tiếng Việt, tích hợp tìm kiếm thời gian thực (Tavily), chạy trên LangGraph Dev Server + LangSmith Studio.
 
-## Cài đặt
+## Cài đặt nhanh
 
-```bash
-pip install -r requirements.txt
+```powershell
+py -m venv .venv
+. .venv\Scripts\Activate.ps1
+pip install -U -r requirements.txt langgraph-cli "langgraph-cli[inmem]" langchain-tavily
 ```
 
 Tạo file `.env`:
+
 ```
 OPENAI_API_KEY=sk-...
 TAVILY_API_KEY=tvly-...
@@ -17,28 +20,58 @@ LANGSMITH_API_KEY=lsm-...
 LANGSMITH_PROJECT=travel-agent
 ```
 
-## Chạy
+## Chạy Dev Server + Studio
 
-```bash
+`langgraph.json` đã cấu hình graph id `travel-agent` → `src.graph:APP`.
 
-# Studio
-py -3.13 -m langgraph_cli dev
+```powershell
+python -m langgraph_cli dev --config langgraph.json --host 127.0.0.1 --port 2024
 ```
 
-Mở http://127.0.0.1:2024
+Mở Studio (URL in ra trong terminal) và chọn assistant/graph: `travel-agent`.
 
-## Cách hoạt động
+## Kiến trúc hiện tại
 
-1. **Planner**: Tạo kế hoạch dựa trên yêu cầu
-2. **Executor**: Tìm thông tin thời gian thực và tạo lịch trình
-3. **Replanner**: Tổng hợp kết quả
+- parse → search → plan (tất cả trong `src/agents/travel_agent.py`)
+- Search: `langchain_tavily.TavilySearch` (đọc `TAVILY_API_KEY` từ `.env`)
+- Orchestrator: `src/graph.py` (`APP`)
 
-## Input
+## Ví dụ yêu cầu (Đà Nẵng 1 tuần)
+
+Input mẫu:
 
 ```
-"Hey, lên cho mình kế hoạch đi Đà Lạt 3 ngày 2 đêm với. Mình thích đi cà phê chill, chụp ảnh thiên nhiên. Ngân sách tầm trung thôi, và mình không thích đi bộ nhiều quá đâu nhé."
+Lên cho mình kế hoạch đi Đà Nẵng 1 tuần với. Mình thích đi chơi chỗ giới trẻ, chụp ảnh địa điểm hot, ăn món ăn được nhiều review ngon. Ngân sách tầm trung thôi, và giúp mình sử dụng phương tiện nào tiện với.
 ```
 
-## Output
+Output (rút gọn minh hoạ):
 
-Lịch trình Markdown với schedule, transportation, dining, cost.
+```
+# Lịch trình du lịch Đà Nẵng
+
+## Thông tin chung
+- Ngân sách: Trung bình
+- Phong cách: Chụp ảnh, địa điểm hot, ẩm thực review cao
+- Di chuyển: Thuê xe máy (150–200k/ngày) hoặc taxi/Grab (~10–15k/km)
+
+---
+
+NGÀY 1: Khám phá thành phố
+# schedule
+- 08:00–09:30: Cầu Rồng
+- 10:00–12:00: Công viên APEC
+- 14:00–16:00: ...
+
+# transportation
+- Thuê xe máy hoặc Grab
+
+# dining_suggestions
+- Bánh mì..., Mì Quảng..., Hải sản...
+
+# estimated_cost
+- Tổng ngày 1: ~xxxk VND (vé/ăn/xe)
+
+... (tiếp tục đến ngày 7: Bà Nà Hills, Mỹ Khê, Sơn Trà, Ghềnh Bàng, văn hoá, mua sắm)
+```
+
+Lưu ý: Khi chạy thực, agent sẽ dùng search để cập nhật giờ mở cửa/giá vé/địa điểm hot/citimations mới nhất.
