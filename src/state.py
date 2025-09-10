@@ -1,8 +1,5 @@
-from typing import TypedDict, List, Tuple
+from typing import TypedDict
 
-
-class PlanExecute(TypedDict):
+class TravelState(TypedDict):
     input: str
-    plan: List[str]  # danh sách bước/Ngày
-    past_steps: List[Tuple[str, str]]  # (task, result)
-    response: str  # Markdown cuối
+    response: str

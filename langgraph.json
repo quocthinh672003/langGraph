@@ -1,0 +1,10 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "travel-agent": "src.graph:APP"
+  },
+  "env": ".env",
+  "image_distro": "wolfi"
+}
+
+  
