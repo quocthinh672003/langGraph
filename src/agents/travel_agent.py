@@ -1,6 +1,10 @@
 from langchain_openai import ChatOpenAI
 from src.tools.search import smart_search
 from src.state import TravelState
+from src.prompts import (
+    PARSE_PROMPT, SEARCH_PROMPT, PLAN_PROMPT, 
+    NON_ITINERARY_PROMPT, TASK_TYPE_MAPPING
+)
 from typing import List, Dict, Any
 import re
 import json
@@ -108,81 +112,12 @@ def _get_max_tokens(num_days: int) -> int:
         return 3200
 
 
-def _normalize_budget_to_vnd(budget_str: str) -> Dict[str, int]:
-    """Best-effort parse of budget string to VND range.
-
-    Examples:
-    - "5 triệu" -> {"min": 5_000_000, "max": 5_000_000}
-    - "3-5 triệu" -> {"min": 3_000_000, "max": 5_000_000}
-    - "tầm trung" -> {}
-    """
-    if not budget_str:
-        return {}
-    s = budget_str.lower().strip()
-    # Replace separators
-    s = s.replace(",", ".")
-    # Pattern for ranges like 3-5 or 3 – 5
-    import re as _re
-
-    m = _re.search(
-        r"(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*(tr|triệu|m|million|vnd|k)?", s
-    )
-    if m:
-        a = float(m.group(1))
-        b = float(m.group(2))
-        unit = m.group(3) or "tr"
-        if unit in {"k"}:
-            mult = 1_000
-        elif unit in {"vnd"}:
-            mult = 1
-        else:
-            mult = 1_000_000
-        return {"min": int(a * mult), "max": int(b * mult)}
-    m2 = _re.search(r"(\d+(?:\.\d+)?)\s*(tr|triệu|m|million)", s)
-    if m2:
-        v = float(m2.group(1))
-        return {"min": int(v * 1_000_000), "max": int(v * 1_000_000)}
-    m3 = _re.search(r"(\d{6,})", s)
-    if m3:
-        v = int(m3.group(1))
-        return {"min": v, "max": v}
-    return {}
 
 
 @traceable(name="parse")
 def _step_parse(llm: ChatOpenAI, user_input: str) -> Dict[str, Any]:
     """Parse user input and return structured fields including task_type."""
-    analysis_prompt = f"""Phân tích yêu cầu du lịch: "{user_input}"
-
-QUAN TRỌNG: 
-- ĐỌC KỸ TỪNG TỪ để xác định địa điểm chính xác
-- Nếu text nói "Huế" thì location phải là "Huế", không phải "Hà Nội" hay nơi khác
-- Phân tích thời gian cụ thể (ngày trong tuần, số ngày)
-- Hiểu ngữ cảnh gia đình, nhóm bạn, cá nhân
-- Tạo search queries về DU LỊCH, không phải về công nghệ
-
-Trả JSON duy nhất:
-{{
-  "location": "tên địa điểm chính xác (VD: Huế, Đà Nẵng, Hà Nội)",
-  "duration": "thời gian cụ thể (VD: 3 ngày 2 đêm, thứ Sáu đến Chủ Nhật)",
-  "interests": ["sở thích từ yêu cầu"],
-  "budget": "ngân sách được đề cập",
-  "constraints": ["hạn chế, yêu cầu đặc biệt"],
-  "search_queries": ["truy vấn tìm kiếm về DU LỊCH địa điểm đó"],
-  "task_type": "itinerary|list_cafes|food_tour|photo_spots|compare|guide"
-}}
-
-Ví dụ phân tích:
-- "Lên kế hoạch du lịch chi tiết tại Huế" → location: "Huế", search_queries: ["Huế địa điểm du lịch", "Huế ẩm thực", "Huế khách sạn"]
-- "thứ Sáu đến Chủ Nhật" → duration: "3 ngày 2 đêm" 
-- "gia đình 4 người" → constraints: ["phù hợp gia đình"]
-- "8 triệu đồng" → budget: "8 triệu đồng"
-- "Ngân sách: 8 triệu đồng" → budget: "8 triệu đồng"
-
-NHẮC LẠI: 
-- Nếu text nói "Huế" thì location phải là "Huế"!
-- Nếu text nói "8 triệu đồng" thì budget phải là "8 triệu đồng"!
-"""
+    analysis_prompt = PARSE_PROMPT.format(user_input=user_input)
     system_msg = {
         "role": "system",
         "content": "You are a travel planning expert. Read the input text carefully and extract information accurately. If the text mentions 'Huế', the location must be 'Huế'. If the text mentions '8 triệu đồng', the budget must be '8 triệu đồng'. Be precise and factual.",
@@ -210,7 +145,6 @@ NHẮC LẠI:
     duration = (analysis_data.get("duration") or "").strip()
     interests = analysis_data.get("interests") or []
     budget = (analysis_data.get("budget") or "").strip()
-    budget_range = _normalize_budget_to_vnd(budget)
     constraints = analysis_data.get("constraints") or []
     seed_queries = analysis_data.get("search_queries") or []
     num_days = _infer_days(duration) if duration else 0
@@ -224,7 +158,6 @@ NHẮC LẠI:
         "seed_queries": seed_queries,
         "num_days": num_days,
         "task_type": intent,
-        "budget_range": budget_range,
     }
 
 
@@ -240,11 +173,9 @@ def _step_search(
 ) -> Dict[str, Any]:
     """Run web search and return curated summary with fallback."""
     
-    # Step 1: Get search results
+    # Step 1: Get search results (include budget in search context)
     payload = smart_search(location, duration, interests, budget, constraints, seed_queries)
     raw_items = payload.get("raw", [])
-    citations = payload.get("citations", [])
-    
     # Step 2: Create curated summary from search results
     curated_summary = _create_curated_summary(raw_items, interests, top_k)
     
@@ -252,7 +183,7 @@ def _step_search(
     if not curated_summary.strip():
         curated_summary = _create_fallback_summary(location, interests, budget)
     
-    return {"curated_summary": curated_summary, "citations": citations}
+    return {"curated_summary": curated_summary}
 
 
 def _create_curated_summary(raw_items: List[Dict[str, Any]], interests: List[str], top_k: int) -> str:
@@ -314,7 +245,6 @@ def _step_plan(
     constraints: List[str],
     num_days: int,
     curated_summary: str,
-    citations: List[str],
     price_mode: str = "relaxed",
 ) -> str:
     """Create the final Markdown output according to task type."""
@@ -327,92 +257,17 @@ def _step_plan(
             return (
                 "Thiếu số ngày cho lịch trình. Vui lòng cho biết bạn đi bao nhiêu ngày."
             )
-        plan_prompt = f"""Tạo lịch trình du lịch {location} CHI TIẾT (theo ngày) bằng Markdown.
-
-Yêu cầu gốc: {user_input}
-Sở thích: {", ".join(interests) if interests else "du lịch"}; Ngân sách: {budget or "không rõ"}; Hạn chế: {", ".join(constraints) if constraints else "không có"}
-
-QUAN TRỌNG VỀ NGÂN SÁCH:
-- Ngân sách được đề cập: {budget or "không rõ"}
-- Tổng chi phí phải ≤ ngân sách này
-- Nếu ngân sách là "8 triệu đồng" thì tổng chi phí phải ≤ 8.000.000 VNĐ
-
-QUAN TRỌNG - Tạo output CHI TIẾT như ví dụ:
-- Thời gian cụ thể: "14:00", "15:30", "18:00" (không phải "08:00-10:00")
-- Địa chỉ/quán ăn cụ thể: "Quán Bún Bò Huế (123 Nguyễn Huệ, Huế)"
-- Chi phí chi tiết từng mục: "Tàu hỏa: 1.200.000 VNĐ", "Taxi: 100.000 VNĐ"
-- Hoạt động phù hợp từng thành viên: "chèo SUP cho con trai", "cà phê sân vườn cho bố"
-- Gợi ý nơi ở cụ thể: "Mộc Villa (có sân vườn, gần khu mua sắm)"
-
-Nguyên tắc:
-- Không dùng tên chung chung/placeholder. Nếu thiếu dữ liệu: ghi "Khu vực …, tham khảo thêm trên bản đồ".
-- Lưu trú: đề xuất 2–3 nơi THẬT (tên + khu vực + tầm giá) nếu có trong kết quả search.
-- Chi phí: ghi theo khoảng (min–max) và nêu giả định phương tiện. Không ghi "Vé: 0 VND"; nếu miễn phí ghi "miễn phí".
-- Gom điểm gần nhau theo khu vực; tránh nhảy xa; ưu tiên địa điểm hot, hợp giới trẻ; tránh filler.
-- Ít đi bộ/di chuyển hợp lý: tối đa 2 khu vực/ngày; tránh đường vòng; loại điểm quá xa/trekking/khó tiếp cận.
-- Ngân sách tổng phải ≤ ngân sách người dùng; nếu vượt, bắt buộc loại hoạt động/điểm vé cao và thay bằng điểm miễn phí/rẻ.
-- Ngân sách/ngày ≈ ngân sách/{num_days}. Mỗi ngày chỉ 3–4 hoạt động phù hợp mức này, 2–3 gợi ý ăn uống ngắn gọn.
-- Tránh lặp tên địa điểm/quán giữa các ngày; mỗi tên chỉ xuất hiện 1 lần trong toàn lịch.
-- Chỉ dùng điểm có trong "Kết quả search"; nếu không chắc, ghi "khu vực …, tham khảo thêm trên bản đồ".
-- Giá món ăn (chế độ {price_mode}): nếu "strict" chỉ ghi khi có bằng chứng rõ từ search; nếu "relaxed" có thể ghi "dao động …–… VND"; nếu không chắc thì bỏ giá.
-- Không giải thích, không in URL; chỉ in Markdown đúng template.
-
-Kết quả search (rút gọn, thông tin thật):
-{curated_summary}
-
-# Lịch trình du lịch {location}
-
-## Thông tin chung
-- Ngân sách: [tổng + ngân sách/ngày và phân bổ hợp lý]
-- Phong cách: [tóm tắt]
-- Di chuyển: [gợi ý hạn chế đi bộ nếu có]
-
-Viết lịch trình cho đủ {num_days} ngày theo định dạng CHI TIẾT sau:
-
-## Ngày X: [tên]
-### 📅 Schedule
-- **[hh:mm]**: [hoạt động chi tiết + địa điểm cụ thể]
-- **[hh:mm]**: [hoạt động chi tiết + địa điểm cụ thể]
-- **[hh:mm]**: [hoạt động chi tiết + địa điểm cụ thể]
-
-### 🚗 Transportation
-- [phương án taxi/Grab/xe máy chi tiết]
-
-### 🍽️ Dining Suggestions
-- [bữa]: [tên quán cụ thể + địa chỉ/khu vực]
-- [bữa]: [tên quán cụ thể + địa chỉ/khu vực]
-
-### 💰 Estimated Cost
-- [mục 1]: [số tiền cụ thể]
-- [mục 2]: [số tiền cụ thể]
-- [mục 3]: [số tiền cụ thể]
-- **Tổng ngày X**: [tổng số tiền]
-
----
-
-Viết đủ {num_days} ngày theo format trên. Cuối cùng thêm:
-
-## Tổng hợp chi phí
-- **Ngày 1**: [số tiền]
-- **Ngày 2**: [số tiền]
-- **Ngày 3**: [số tiền]
-- **Tổng chi phí ăn uống, di chuyển**: [số tiền]
-- **Chi phí [phương tiện]**: [số tiền]
-- **Tổng chi phí toàn bộ**: [số tiền]
-
-### LƯU Ý QUAN TRỌNG:
-- Chi phí ước tính có thể thay đổi tùy thuộc vào lựa chọn thực tế và thời gian đặt chỗ.
-- Nên đặt trước các hoạt động trải nghiệm và chỗ ăn uống để đảm bảo có chỗ.
-
-Yêu cầu: Rõ ràng, súc tích; không dùng địa chỉ giả; ưu tiên giờ/giá 2024-2025."""
+        plan_prompt = PLAN_PROMPT.format(
+            location=location,
+            user_input=user_input,
+            interests=", ".join(interests) if interests else "du lịch",
+            budget=budget or "không rõ",
+            constraints=", ".join(constraints) if constraints else "không có",
+            curated_summary=curated_summary,
+            num_days=num_days
+        )
     else:
-        section_title = {
-            "list_cafes": "Danh sách cà phê chill",
-            "food_tour": "Food tour",
-            "photo_spots": "Điểm chụp ảnh đẹp",
-            "compare": "So sánh lựa chọn",
-            "guide": "Gợi ý đi đâu làm gì",
-        }.get(task_type, "Gợi ý tổng hợp")
+        section_title = TASK_TYPE_MAPPING.get(task_type, "Gợi ý tổng hợp")
         plan_prompt = f"""Tạo hướng dẫn du lịch {location} theo Markdown (không cần theo ngày).
 
 Yêu cầu gốc: {user_input}
@@ -458,7 +313,6 @@ def travel_agent(state: TravelState) -> TravelState:
     seed_queries = parsed.get("search_queries") or [user_input]
     num_days = parsed.get("num_days", 0)
     task_type = parsed.get("task_type", "itinerary")
-    budget_range = parsed.get("budget_range", {})
 
     # basic validation
     missing: List[str] = []
@@ -475,7 +329,7 @@ def travel_agent(state: TravelState) -> TravelState:
             location, duration, interests, budget, constraints, seed_queries
         )
     except Exception:
-        search_out = {"curated_summary": "", "citations": []}
+        search_out = {"curated_summary": ""}
     curated_summary = search_out.get("curated_summary", "")
 
     # plan (auto-scale theo loại tác vụ & số ngày)
@@ -496,7 +350,6 @@ def travel_agent(state: TravelState) -> TravelState:
         constraints=constraints,
         num_days=num_days,
         curated_summary=curated_summary,
-        citations=[],
         price_mode="relaxed",
     )
     return {"response": markdown}

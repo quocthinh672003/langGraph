@@ -1,5 +1,5 @@
 from langchain_tavily import TavilySearch
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Optional
 import re
 
 # Config constants for easy tuning
@@ -36,22 +36,6 @@ def _normalize_result(result: Any) -> List[Dict[str, Any]]:
                     items.append({"title": title, "url": url, "content": content})
     return items
 
-
-def _summarize_items(items: List[Dict[str, Any]]) -> Tuple[str, List[str]]:
-    """Build a compact summary and collect citation URLs."""
-    lines: List[str] = []
-    citations: List[str] = []
-    for i, it in enumerate(items[:MAX_ITEMS], start=1):
-        title = it.get("title") or "Kết quả"
-        url = it.get("url") or ""
-        content = it.get("content") or ""
-        short = content.strip()
-        if len(short) > SUMMARY_LEN:
-            short = short[: SUMMARY_LEN - 3] + "..."
-        lines.append(f"{i}. {title} — {short} {url}")
-        if url:
-            citations.append(url)
-    return ("\n".join(lines) if lines else ""), citations
 
 
 def smart_search(
@@ -100,37 +84,10 @@ def smart_search(
             # Skip errors silently to avoid polluting results
             continue
 
-    summary, citations = _summarize_items(items)
     return {
-        "summary": summary or f"Thông tin cơ bản về {location}",
-        "citations": citations,
+        "summary": f"Thông tin cơ bản về {location}",
+        "citations": [],
         "raw": items,
     }
 
 
-def search_specific_info(location: str, info_type: str) -> str:
-    """Backward-compatible focused search by info type; returns a concise summary string."""
-    if not location or not str(location).strip():
-        return ""
-    search_tool = get_search_tool()
-
-    specific_queries = {
-        "giờ_mở_cửa": f"{location} giờ mở cửa địa điểm du lịch 2024 2025",
-        "giá_vé": f"{location} giá vé tham quan 2024 2025",
-        "quán_ăn": f"{location} quán ăn ngon review cao 2024 2025",
-        "cà_phê": f"{location} quán cà phê đẹp chill 2024 2025",
-        "chụp_ảnh": f"{location} địa điểm chụp ảnh đẹp 2024 2025",
-        "thiên_nhiên": f"{location} cảnh đẹp thiên nhiên 2024 2025",
-        "phương_tiện": f"{location} phương tiện di chuyển taxi xe máy",
-        "khách_sạn": f"{location} khách sạn tầm trung review tốt 2024 2025",
-    }
-
-    query = specific_queries.get(info_type, f"{location} {info_type} 2024 2025")
-
-    try:
-        result = search_tool.invoke(query)
-        items = _normalize_result(result)
-        summary, _ = _summarize_items(items)
-        return summary or ""
-    except Exception:
-        return ""

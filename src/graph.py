@@ -7,14 +7,12 @@ from src.agents.travel_agent import _step_parse, _step_search, _step_plan
 load_dotenv()
 
 
-def _get_llm() -> ChatOpenAI:
-    return ChatOpenAI(
-        model="gpt-4o-mini", temperature=0.1, request_timeout=10, max_tokens=2000
-    )
 
 
 def node_parse(state: Any) -> Dict[str, Any]:
-    llm = _get_llm()
+    llm = ChatOpenAI(
+        model="gpt-4o-mini", temperature=0.1, request_timeout=10, max_tokens=550
+    )
     # Accept either raw string or dict with key 'input'
     if isinstance(state, str):
         user_input = state
@@ -40,7 +38,9 @@ def node_search(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def node_plan(state: Dict[str, Any]) -> Dict[str, Any]:
-    llm = _get_llm()
+    llm = ChatOpenAI(
+        model="gpt-4o-mini", temperature=0.2, request_timeout=15, max_tokens=2000
+    )
     markdown = _step_plan(
         llm=llm,
         user_input=state.get("input", ""),
@@ -51,7 +51,6 @@ def node_plan(state: Dict[str, Any]) -> Dict[str, Any]:
         constraints=state.get("constraints", []),
         num_days=state.get("num_days", 0),
         curated_summary=state.get("curated_summary", ""),
-        citations=state.get("citations", []),
     )
     return {**state, "response": markdown}
 
